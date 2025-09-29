@@ -1,10 +1,15 @@
 using System;
+codex/review-agents.md-and-checklist.md-files
 using System.Collections.Generic;
+main
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+codex/review-agents.md-and-checklist.md-files
 using RobbieCraft.Blocks;
+
+main
 
 namespace RobbieCraft.World
 {
@@ -26,12 +31,16 @@ namespace RobbieCraft.World
         private bool _meshRequested;
         private ChunkMeshData _meshData;
         private int _currentLodLevel = -1;
+        codex/review-agents.md-and-checklist.md-files
         private NativeArray<int> _maskBuffer;
         private NativeArray<BlockUvData> _blockUvData;
         private NativeArray<float4> _blockColors;
         private NativeArray<byte> _blockTintMask;
         private NativeArray<float4> _tintPalette;
         private byte _groundBlockId;
+
+        private NativeArray<byte> _maskBuffer;
+        main
 
         /// <summary>
         /// Coordinate of this chunk on the world grid.
@@ -57,17 +66,27 @@ namespace RobbieCraft.World
             _chunkData ??= new ChunkData(Allocator.Persistent);
             if (!_maskBuffer.IsCreated)
             {
+ codex/review-agents.md-and-checklist.md-files
                 _maskBuffer = new NativeArray<int>(ChunkConfig.ChunkSizeX * ChunkConfig.ChunkSizeY, Allocator.Persistent, NativeArrayOptions.ClearMemory);
             }
             NativeArray<byte> rawData = _chunkData.RawData;
             job.Blocks = rawData;
             job.TintIndices = _chunkData.TintData;
+
+                _maskBuffer = new NativeArray<byte>(ChunkConfig.ChunkSizeX * ChunkConfig.ChunkSizeY, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+            }
+            NativeArray<byte> rawData = _chunkData.RawData;
+            job.Blocks = rawData;
+ main
             _generationHandle = job.Schedule(rawData.Length, ChunkConfig.ChunkSizeX);
             _generationScheduled = true;
             _meshRequested = false;
             _currentLodLevel = -1;
             _meshScheduled = false;
+codex/review-agents.md-and-checklist.md-files
             _groundBlockId = job.GroundBlockId;
+
+main
         }
 
         /// <summary>
@@ -137,17 +156,23 @@ namespace RobbieCraft.World
                 var mesher = new ChunkGreedyMesher
                 {
                     Blocks = _chunkData.RawData,
+codex/review-agents.md-and-checklist.md-files
                     TintIndices = _chunkData.TintData,
                     BlockUvs = _blockUvData,
                     BlockColors = _blockColors,
                     BlockTintMask = _blockTintMask,
                     TintPalette = _tintPalette,
+
+ main
                     AirBlockId = _pendingAirBlock,
                     Vertices = _meshData.Vertices,
                     Triangles = _meshData.Triangles,
                     Normals = _meshData.Normals,
                     Uv = _meshData.Uv,
+codex/review-agents.md-and-checklist.md-files
                     Colors = _meshData.Colors,
+
+ main
                     MaskBuffer = _maskBuffer
                 };
 
@@ -163,11 +188,18 @@ namespace RobbieCraft.World
         private void BuildLowDetailMesh(int lodLevel)
         {
             int step = 1 << lodLevel;
+ codex/review-agents.md-and-checklist.md-files
             var vertices = new List<Vector3>();
             var normals = new List<Vector3>();
             var uvs = new List<Vector2>();
             var triangles = new List<int>();
             var colors = new List<Color>();
+
+            var vertices = new System.Collections.Generic.List<Vector3>();
+            var normals = new System.Collections.Generic.List<Vector3>();
+            var uvs = new System.Collections.Generic.List<Vector2>();
+            var triangles = new System.Collections.Generic.List<int>();
+ main
 
             NativeArray<byte> blocks = _chunkData.RawData;
 
@@ -216,6 +248,7 @@ namespace RobbieCraft.World
                     uvs.Add(new Vector2(1f, 0f));
                     uvs.Add(new Vector2(0f, 1f));
                     uvs.Add(new Vector2(1f, 1f));
+codex/review-agents.md-and-checklist.md-files
 
                     Color color = ConvertColor(BlockTintingSystem.EvaluateTintedColor(_groundBlockId, 0, _blockColors, _blockTintMask, _tintPalette));
                     colors.Add(color);
@@ -226,11 +259,21 @@ namespace RobbieCraft.World
             }
 
             ApplyMesh(vertices, normals, uvs, triangles, colors);
+
+                }
+            }
+
+            ApplyMesh(vertices, normals, uvs, triangles);
+ main
             _meshScheduled = false;
             _currentLodLevel = lodLevel;
         }
 
+codex/review-agents.md-and-checklist.md-files
         private void ApplyMesh(List<Vector3> vertices, List<Vector3> normals, List<Vector2> uvs, List<int> triangles, List<Color> colors)
+
+        private void ApplyMesh(System.Collections.Generic.List<Vector3> vertices, System.Collections.Generic.List<Vector3> normals, System.Collections.Generic.List<Vector2> uvs, System.Collections.Generic.List<int> triangles)
+ main
         {
             _mesh ??= new Mesh { name = $"Chunk_{Coordinate.X}_{Coordinate.Z}" };
             _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -238,7 +281,10 @@ namespace RobbieCraft.World
             _mesh.SetNormals(normals);
             _mesh.SetUVs(0, uvs);
             _mesh.SetTriangles(triangles, 0);
+codex/review-agents.md-and-checklist.md-files
             _mesh.SetColors(colors);
+
+ main
             _mesh.RecalculateBounds();
 
             GetComponent<MeshFilter>().sharedMesh = _mesh;
@@ -256,7 +302,10 @@ namespace RobbieCraft.World
             _mesh.SetNormals(_meshData.Normals.AsArray());
             _mesh.SetUVs(0, _meshData.Uv.AsArray());
             _mesh.SetTriangles(_meshData.Triangles.AsArray(), 0);
+ codex/review-agents.md-and-checklist.md-files
             ApplyColors(_meshData.Colors);
+
+ main
             _mesh.RecalculateBounds();
 
             GetComponent<MeshFilter>().sharedMesh = _mesh;
@@ -266,6 +315,7 @@ namespace RobbieCraft.World
             }
         }
 
+codex/review-agents.md-and-checklist.md-files
         private void ApplyColors(NativeList<float4> colors)
         {
             if (!colors.IsCreated)
@@ -299,6 +349,8 @@ namespace RobbieCraft.World
             _tintPalette = tintPalette;
         }
 
+
+ main
         private void OnDestroy()
         {
             if (_generationScheduled)
