@@ -1,7 +1,7 @@
 using System;
+using RobbieCraft.Blocks;
 using Unity.Collections;
 using Unity.Jobs;
-using Unity.Mathematics;
 using UnityEngine;
 
 namespace RobbieCraft.World
@@ -24,12 +24,24 @@ namespace RobbieCraft.World
         private bool _meshRequested;
         private ChunkMeshData _meshData;
         private int _currentLodLevel = -1;
-        private NativeArray<byte> _maskBuffer;
+        private NativeArray<GreedyMaskEntry> _maskBuffer;
+        private NativeArray<BlockVisualInfo> _blockVisuals;
+        private BlockTypeRegistry _blockRegistry;
+        private byte _activeAirBlock;
 
         /// <summary>
         /// Coordinate of this chunk on the world grid.
         /// </summary>
         public ChunkCoordinate Coordinate { get; private set; }
+
+        /// <summary>
+        /// Configures shared registry data for this chunk instance.
+        /// </summary>
+        public void Initialize(BlockTypeRegistry registry, NativeArray<BlockVisualInfo> visuals)
+        {
+            _blockRegistry = registry;
+            _blockVisuals = visuals;
+        }
 
         /// <summary>
         /// True when the chunk is waiting for background job completion.
@@ -50,7 +62,7 @@ namespace RobbieCraft.World
             _chunkData ??= new ChunkData(Allocator.Persistent);
             if (!_maskBuffer.IsCreated)
             {
-                _maskBuffer = new NativeArray<byte>(ChunkConfig.ChunkSizeX * ChunkConfig.ChunkSizeY, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+                _maskBuffer = new NativeArray<GreedyMaskEntry>(ChunkConfig.ChunkSizeX * ChunkConfig.ChunkSizeY, Allocator.Persistent, NativeArrayOptions.ClearMemory);
             }
             NativeArray<byte> rawData = _chunkData.RawData;
             job.Blocks = rawData;
@@ -59,6 +71,7 @@ namespace RobbieCraft.World
             _meshRequested = false;
             _currentLodLevel = -1;
             _meshScheduled = false;
+            _chunkData.ClearAllTints();
         }
 
         /// <summary>
@@ -73,6 +86,7 @@ namespace RobbieCraft.World
 
             _pendingAirBlock = airBlockId;
             _pendingLodLevel = lodLevel;
+            _activeAirBlock = airBlockId;
 
             if (_generationScheduled)
             {
@@ -129,10 +143,13 @@ namespace RobbieCraft.World
                 {
                     Blocks = _chunkData.RawData,
                     AirBlockId = _pendingAirBlock,
+                    BlockVisuals = _blockVisuals,
+                    TintOverrides = _chunkData.RawTints,
                     Vertices = _meshData.Vertices,
                     Triangles = _meshData.Triangles,
                     Normals = _meshData.Normals,
                     Uv = _meshData.Uv,
+                    Colors = _meshData.Colors,
                     MaskBuffer = _maskBuffer
                 };
 
@@ -151,27 +168,61 @@ namespace RobbieCraft.World
             var vertices = new System.Collections.Generic.List<Vector3>();
             var normals = new System.Collections.Generic.List<Vector3>();
             var uvs = new System.Collections.Generic.List<Vector2>();
+            var colors = new System.Collections.Generic.List<Color32>();
             var triangles = new System.Collections.Generic.List<int>();
 
             NativeArray<byte> blocks = _chunkData.RawData;
+            NativeArray<Color32> tints = _chunkData.RawTints;
 
             for (int x = 0; x < ChunkConfig.ChunkSizeX; x += step)
             {
                 for (int z = 0; z < ChunkConfig.ChunkSizeZ; z += step)
                 {
                     int maxHeight = 0;
+                    byte topBlockId = _pendingAirBlock;
+                    int topIndex = -1;
+
                     for (int localX = 0; localX < step && x + localX < ChunkConfig.ChunkSizeX; localX++)
                     {
                         for (int localZ = 0; localZ < step && z + localZ < ChunkConfig.ChunkSizeZ; localZ++)
                         {
                             for (int y = ChunkConfig.ChunkSizeY - 1; y >= 0; y--)
                             {
-                                if (blocks[ChunkConfig.ToIndex(x + localX, y, z + localZ)] != _pendingAirBlock)
+                                int index = ChunkConfig.ToIndex(x + localX, y, z + localZ);
+                                byte blockId = blocks[index];
+                                if (blockId != _pendingAirBlock && y + 1 > maxHeight)
                                 {
-                                    maxHeight = math.max(maxHeight, y + 1);
+                                    maxHeight = y + 1;
+                                    topBlockId = blockId;
+                                    topIndex = index;
                                     break;
                                 }
                             }
+                        }
+                    }
+
+                    if (maxHeight == 0)
+                    {
+                        continue;
+                    }
+
+                    BlockVisualInfo visual = default;
+                    Color32 faceColor = new Color32(255, 255, 255, 255);
+                    if (topBlockId < _blockVisuals.Length)
+                    {
+                        visual = _blockVisuals[topBlockId];
+                        faceColor = visual.BaseColor;
+                        if (tints.IsCreated && topIndex >= 0)
+                        {
+                            Color32 tint = tints[topIndex];
+                            if (tint.a > 0 && (visual.Flags & BlockVisualFlags.SupportsTint) != 0)
+                            {
+                                faceColor = tint;
+                            }
+                        }
+                        if (faceColor.a == 0)
+                        {
+                            faceColor.a = 255;
                         }
                     }
 
@@ -196,25 +247,37 @@ namespace RobbieCraft.World
                     normals.Add(normal);
                     normals.Add(normal);
 
-                    uvs.Add(new Vector2(0f, 0f));
-                    uvs.Add(new Vector2(1f, 0f));
-                    uvs.Add(new Vector2(0f, 1f));
-                    uvs.Add(new Vector2(1f, 1f));
+                    Vector2 uvMin = new Vector2(visual.UvMin.x, visual.UvMin.y);
+                    Vector2 uvSize = new Vector2(visual.UvSize.x, visual.UvSize.y);
+                    if (uvSize.x <= 0f || uvSize.y <= 0f)
+                    {
+                        uvSize = Vector2.one;
+                    }
+                    uvs.Add(uvMin);
+                    uvs.Add(uvMin + new Vector2(uvSize.x, 0f));
+                    uvs.Add(uvMin + new Vector2(0f, uvSize.y));
+                    uvs.Add(uvMin + new Vector2(uvSize.x, uvSize.y));
+
+                    colors.Add(faceColor);
+                    colors.Add(faceColor);
+                    colors.Add(faceColor);
+                    colors.Add(faceColor);
                 }
             }
 
-            ApplyMesh(vertices, normals, uvs, triangles);
+            ApplyMesh(vertices, normals, uvs, colors, triangles);
             _meshScheduled = false;
             _currentLodLevel = lodLevel;
         }
 
-        private void ApplyMesh(System.Collections.Generic.List<Vector3> vertices, System.Collections.Generic.List<Vector3> normals, System.Collections.Generic.List<Vector2> uvs, System.Collections.Generic.List<int> triangles)
+        private void ApplyMesh(System.Collections.Generic.List<Vector3> vertices, System.Collections.Generic.List<Vector3> normals, System.Collections.Generic.List<Vector2> uvs, System.Collections.Generic.List<Color32> colors, System.Collections.Generic.List<int> triangles)
         {
             _mesh ??= new Mesh { name = $"Chunk_{Coordinate.X}_{Coordinate.Z}" };
             _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             _mesh.SetVertices(vertices);
             _mesh.SetNormals(normals);
             _mesh.SetUVs(0, uvs);
+            _mesh.SetColors(colors);
             _mesh.SetTriangles(triangles, 0);
             _mesh.RecalculateBounds();
 
@@ -232,6 +295,7 @@ namespace RobbieCraft.World
             _mesh.SetVertices(_meshData.Vertices.AsArray());
             _mesh.SetNormals(_meshData.Normals.AsArray());
             _mesh.SetUVs(0, _meshData.Uv.AsArray());
+            _mesh.SetColors(_meshData.Colors.AsArray());
             _mesh.SetTriangles(_meshData.Triangles.AsArray(), 0);
             _mesh.RecalculateBounds();
 
@@ -263,6 +327,72 @@ namespace RobbieCraft.World
             {
                 _maskBuffer.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Attempts to read the block id at the provided local coordinate.
+        /// </summary>
+        public bool TryGetBlock(int x, int y, int z, out byte blockId)
+        {
+            if (!InsideChunk(x, y, z))
+            {
+                blockId = 0;
+                return false;
+            }
+
+            if (_chunkData == null)
+            {
+                blockId = 0;
+                return false;
+            }
+
+            blockId = _chunkData.RawData[ChunkConfig.ToIndex(x, y, z)];
+            return blockId != _activeAirBlock;
+        }
+
+        /// <summary>
+        /// Returns true when the block type supports tint overrides.
+        /// </summary>
+        public bool SupportsTint(byte blockId)
+        {
+            return _blockRegistry != null && _blockRegistry.SupportsTinting(blockId);
+        }
+
+        /// <summary>
+        /// Applies a tint override to the given voxel.
+        /// </summary>
+        public void SetBlockTint(int x, int y, int z, Color color)
+        {
+            if (_chunkData == null)
+            {
+                return;
+            }
+
+            Color32 tintColor = color;
+            tintColor.a = 255;
+            _chunkData.SetTint(x, y, z, tintColor);
+            ScheduleMeshBuild(_activeAirBlock, Mathf.Max(0, _currentLodLevel));
+        }
+
+        /// <summary>
+        /// Clears any tint override from the given voxel.
+        /// </summary>
+        public void ClearBlockTint(int x, int y, int z)
+        {
+            if (_chunkData == null)
+            {
+                return;
+            }
+
+            _chunkData.ClearTint(x, y, z);
+            ScheduleMeshBuild(_activeAirBlock, Mathf.Max(0, _currentLodLevel));
+        }
+
+        private static bool InsideChunk(int x, int y, int z)
+        {
+            return x >= 0 && x < ChunkConfig.ChunkSizeX &&
+                   y >= 0 && y < ChunkConfig.ChunkSizeY &&
+                   z >= 0 && z < ChunkConfig.ChunkSizeZ;
         }
     }
 }

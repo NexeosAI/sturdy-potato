@@ -1,0 +1,72 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d9eaf1a3ddf4f8c8bf5d61d9d7914ce, type: 3}
+  m_Name: BlockTypeRegistry
+  m_EditorClassIdentifier: 
+  materialAtlas: {fileID: 11400000, guid: 4c2c7d1db7c2483d9e2a5c38e5ff2b5e, type: 2}
+  blockTypes:
+  - id: 0
+    displayName: Air
+    isSolid: 0
+    durability: 0
+    breakTime: 0.1
+    baseTint: {r: 0, g: 0, b: 0, a: 0}
+    supportsTinting: 0
+    atlasTile: {x: 0, y: 0}
+  - id: 1
+    displayName: Grass
+    isSolid: 1
+    durability: 12
+    breakTime: 0.8
+    baseTint: {r: 0.45490196, g: 0.7254902, b: 0.32941177, a: 1}
+    supportsTinting: 1
+    atlasTile: {x: 0, y: 1}
+  - id: 2
+    displayName: Dirt
+    isSolid: 1
+    durability: 18
+    breakTime: 1.2
+    baseTint: {r: 0.5254902, g: 0.3764706, b: 0.2627451, a: 1}
+    supportsTinting: 0
+    atlasTile: {x: 1, y: 1}
+  - id: 3
+    displayName: Stone
+    isSolid: 1
+    durability: 30
+    breakTime: 2.5
+    baseTint: {r: 0.47058824, g: 0.47058824, b: 0.47058824, a: 1}
+    supportsTinting: 0
+    atlasTile: {x: 2, y: 1}
+  - id: 10
+    displayName: Candy
+    isSolid: 1
+    durability: 10
+    breakTime: 0.6
+    baseTint: {r: 1, g: 0.45490196, b: 0.7372549, a: 1}
+    supportsTinting: 1
+    atlasTile: {x: 0, y: 2}
+  - id: 11
+    displayName: Robot
+    isSolid: 1
+    durability: 35
+    breakTime: 2
+    baseTint: {r: 0.7058824, g: 0.76862746, b: 0.8235294, a: 1}
+    supportsTinting: 0
+    atlasTile: {x: 1, y: 2}
+  - id: 12
+    displayName: Ice
+    isSolid: 1
+    durability: 16
+    breakTime: 1.4
+    baseTint: {r: 0.627451, g: 0.8627451, b: 1, a: 0.78431374}
+    supportsTinting: 1
+    atlasTile: {x: 2, y: 2}

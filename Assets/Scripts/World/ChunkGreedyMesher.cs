@@ -1,3 +1,4 @@
+using RobbieCraft.Blocks;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
@@ -6,6 +7,25 @@ using UnityEngine;
 
 namespace RobbieCraft.World
 {
+    /// <summary>
+    /// Represents an entry in the greedy meshing mask.
+    /// </summary>
+    public struct GreedyMaskEntry
+    {
+        public byte BlockId;
+        public Color32 Color;
+
+        public bool IsEmpty => BlockId == 0;
+
+        public static bool Matches(in GreedyMaskEntry a, in GreedyMaskEntry b)
+        {
+            return a.BlockId == b.BlockId &&
+                   a.Color.r == b.Color.r &&
+                   a.Color.g == b.Color.g &&
+                   a.Color.b == b.Color.b;
+        }
+    }
+
     /// <summary>
     /// Burst-compiled job that performs greedy meshing on chunk voxel data to minimize triangle count.
     /// </summary>
@@ -20,11 +40,18 @@ namespace RobbieCraft.World
         /// </summary>
         public byte AirBlockId;
 
+        [ReadOnly]
+        public NativeArray<BlockVisualInfo> BlockVisuals;
+
+        [ReadOnly]
+        public NativeArray<Color32> TintOverrides;
+
         public NativeList<float3> Vertices;
         public NativeList<int> Triangles;
         public NativeList<float3> Normals;
         public NativeList<float2> Uv;
-        public NativeArray<byte> MaskBuffer;
+        public NativeList<Color32> Colors;
+        public NativeArray<GreedyMaskEntry> MaskBuffer;
 
         private static readonly int3[] Directions =
         {
@@ -94,7 +121,7 @@ namespace RobbieCraft.World
 
                 for (int i = 0; i < maskLength; i++)
                 {
-                    MaskBuffer[i] = 0;
+                    MaskBuffer[i] = default;
                 }
 
                 for (int v = b1; v < b2; v++)
@@ -116,7 +143,19 @@ namespace RobbieCraft.World
                         bool neighborSolid = IsSolid(neighbor.x, neighbor.y, neighbor.z);
 
                         int maskIndex = (v - b1) * uSize + (u - a1);
-                        MaskBuffer[maskIndex] = (byte)((currentSolid && !neighborSolid) ? GetBlock(voxel.x, voxel.y, voxel.z) : (byte)0);
+                        if (currentSolid && !neighborSolid)
+                        {
+                            byte blockId = GetBlock(voxel.x, voxel.y, voxel.z);
+                            MaskBuffer[maskIndex] = new GreedyMaskEntry
+                            {
+                                BlockId = blockId,
+                                Color = ResolveColor(voxel.x, voxel.y, voxel.z, blockId)
+                            };
+                        }
+                        else
+                        {
+                            MaskBuffer[maskIndex] = default;
+                        }
                     }
                 }
 
@@ -125,15 +164,15 @@ namespace RobbieCraft.World
                 {
                     for (int u = 0; u < uSize; )
                     {
-                        byte block = MaskBuffer[v * uSize + u];
-                        if (block == 0)
+                        GreedyMaskEntry entry = MaskBuffer[v * uSize + u];
+                        if (entry.IsEmpty)
                         {
                             u++;
                             continue;
                         }
 
                         int width = 1;
-                        while (u + width < uSize && MaskBuffer[v * uSize + (u + width)] == block)
+                        while (u + width < uSize && GreedyMaskEntry.Matches(MaskBuffer[v * uSize + (u + width)], entry))
                         {
                             width++;
                         }
@@ -144,7 +183,7 @@ namespace RobbieCraft.World
                         {
                             for (int k = 0; k < width; k++)
                             {
-                                if (MaskBuffer[(v + height) * uSize + (u + k)] != block)
+                                if (!GreedyMaskEntry.Matches(MaskBuffer[(v + height) * uSize + (u + k)], entry))
                                 {
                                     done = true;
                                     break;
@@ -158,14 +197,14 @@ namespace RobbieCraft.World
                         }
 
                         // Add face
-                        AddFace(dirIndex, u + a1, v + b1, c, width, height, block);
+                        AddFace(dirIndex, u + a1, v + b1, c, width, height, entry);
 
                         // Clear mask region
                         for (int y = 0; y < height; y++)
                         {
                             for (int x = 0; x < width; x++)
                             {
-                                MaskBuffer[(v + y) * uSize + (u + x)] = 0;
+                                MaskBuffer[(v + y) * uSize + (u + x)] = default;
                             }
                         }
 
@@ -173,6 +212,32 @@ namespace RobbieCraft.World
                     }
                 }
             }
+        }
+
+        private Color32 ResolveColor(int x, int y, int z, byte blockId)
+        {
+            Color32 baseColor = default;
+            if (blockId < BlockVisuals.Length)
+            {
+                baseColor = BlockVisuals[blockId].BaseColor;
+            }
+
+            if (TintOverrides.IsCreated && TintOverrides.Length == Blocks.Length)
+            {
+                Color32 tint = TintOverrides[ChunkConfig.ToIndex(x, y, z)];
+                if (tint.a > 0 && blockId < BlockVisuals.Length && (BlockVisuals[blockId].Flags & BlockVisualFlags.SupportsTint) != 0)
+                {
+                    tint.a = baseColor.a == 0 ? (byte)255 : baseColor.a;
+                    return tint;
+                }
+            }
+
+            if (baseColor.a == 0)
+            {
+                baseColor.a = 255;
+            }
+
+            return baseColor;
         }
 
         private bool IsSolid(int x, int y, int z)
@@ -194,7 +259,7 @@ namespace RobbieCraft.World
 
         private byte GetBlock(int x, int y, int z) => Blocks[ChunkConfig.ToIndex(x, y, z)];
 
-        private void AddFace(int dirIndex, int u, int v, int c, int width, int height, byte blockId)
+        private void AddFace(int dirIndex, int u, int v, int c, int width, int height, GreedyMaskEntry entry)
         {
             float3 normal = Directions[dirIndex];
             int vertexStartIndex = Vertices.Length;
@@ -254,10 +319,33 @@ namespace RobbieCraft.World
             Normals.Add(normal);
             Normals.Add(normal);
 
-            Uv.Add(new float2(0, 0));
-            Uv.Add(new float2(width, 0));
-            Uv.Add(new float2(0, height));
-            Uv.Add(new float2(width, height));
+            BlockVisualInfo visual = entry.BlockId < BlockVisuals.Length ? BlockVisuals[entry.BlockId] : default;
+            float2 uvMin = visual.UvMin;
+            float2 uvSize = visual.UvSize;
+            if (uvSize.x <= 0f || uvSize.y <= 0f)
+            {
+                uvSize = new float2(1f, 1f);
+            }
+
+            Uv.Add(uvMin);
+            Uv.Add(uvMin + new float2(uvSize.x * width, 0f));
+            Uv.Add(uvMin + new float2(0f, uvSize.y * height));
+            Uv.Add(uvMin + new float2(uvSize.x * width, uvSize.y * height));
+
+            Color32 faceColor = entry.Color;
+            if (faceColor.a == 0)
+            {
+                faceColor = visual.BaseColor;
+                if (faceColor.a == 0)
+                {
+                    faceColor.a = 255;
+                }
+            }
+
+            Colors.Add(faceColor);
+            Colors.Add(faceColor);
+            Colors.Add(faceColor);
+            Colors.Add(faceColor);
         }
     }
 }

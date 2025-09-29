@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using RobbieCraft.Blocks;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -15,6 +17,9 @@ namespace RobbieCraft.World
 
         [SerializeField]
         private WorldChunk chunkPrefab;
+
+        [SerializeField]
+        private BlockTypeRegistry blockRegistry;
 
         [Header("Generation Settings")]
         [SerializeField, Range(1, 8)]
@@ -40,10 +45,32 @@ namespace RobbieCraft.World
         private readonly Queue<WorldChunk> _chunkPool = new();
         private Camera _mainCamera;
         private Plane[] _frustumPlanes = new Plane[6];
+        private NativeArray<BlockVisualInfo> _blockVisuals;
 
         private void Awake()
         {
             _mainCamera = Camera.main;
+            if (blockRegistry != null)
+            {
+                _blockVisuals = blockRegistry.BuildVisualInfo(Allocator.Persistent);
+                if (blockRegistry.TryGetBlockId("Air", out byte airId))
+                {
+                    airBlockId = airId;
+                }
+                if (blockRegistry.TryGetBlockId("Grass", out byte groundId))
+                {
+                    groundBlockId = groundId;
+                }
+            }
+            else
+            {
+                Debug.LogWarning("WorldManager is missing a BlockTypeRegistry reference.");
+            }
+
+            if (!_blockVisuals.IsCreated)
+            {
+                _blockVisuals = new NativeArray<BlockVisualInfo>(1, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+            }
         }
 
         private void Start()
@@ -62,6 +89,14 @@ namespace RobbieCraft.World
             UpdateVisibleChunks(center);
             UpdateChunkLods(center);
             UpdateFrustumCulling();
+        }
+
+        private void OnDestroy()
+        {
+            if (_blockVisuals.IsCreated)
+            {
+                _blockVisuals.Dispose();
+            }
         }
 
         private void EnsureSpawnArea()
@@ -163,6 +198,7 @@ namespace RobbieCraft.World
             chunk.transform.SetParent(transform, false);
             chunk.transform.position = new Vector3(coord.X * ChunkConfig.ChunkSizeX, 0f, coord.Z * ChunkConfig.ChunkSizeZ);
             chunk.gameObject.SetActive(true);
+            chunk.Initialize(blockRegistry, _blockVisuals);
             _loadedChunks[coord] = chunk;
             return chunk;
         }
