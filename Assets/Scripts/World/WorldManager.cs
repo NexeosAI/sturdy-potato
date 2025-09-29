@@ -1,4 +1,10 @@
 using System.Collections.Generic;
+codex/review-agents.md-and-checklist.md-files
+using System;
+using RobbieCraft.Blocks;
+using Unity.Collections;
+
+main
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -31,19 +37,40 @@ namespace RobbieCraft.World
 
         [Header("Blocks")]
         [SerializeField]
+        codex/review-agents.md-and-checklist.md-files
+        private BlockRegistry blockRegistry;
+
+        [SerializeField]
+        private BlockType groundBlock;
+
+        [SerializeField]
+        private BlockType airBlock;
+
         private byte groundBlockId = 1;
 
         [SerializeField]
         private byte airBlockId = 0;
+        main
 
         private readonly Dictionary<ChunkCoordinate, WorldChunk> _loadedChunks = new();
         private readonly Queue<WorldChunk> _chunkPool = new();
         private Camera _mainCamera;
         private Plane[] _frustumPlanes = new Plane[6];
+        codex/review-agents.md-and-checklist.md-files
+        private BlockRuntimeData _blockRuntimeData;
+        private bool _runtimeInitialized;
+        private byte _resolvedGroundBlockId = 1;
+        private byte _resolvedAirBlockId;
+
+          main
 
         private void Awake()
         {
             _mainCamera = Camera.main;
+ codex/review-agents.md-and-checklist.md-files
+            InitializeRuntimeData();
+
+ main
         }
 
         private void Start()
@@ -129,7 +156,11 @@ namespace RobbieCraft.World
                 int desiredLod = DetermineLodLevel(center, kvp.Key);
                 if (kvp.Value.CurrentLodLevel != desiredLod && !kvp.Value.IsBusy)
                 {
+ codex/review-agents.md-and-checklist.md-files
+                    kvp.Value.ScheduleMeshBuild(_resolvedAirBlockId, desiredLod);
+
                     kvp.Value.ScheduleMeshBuild(airBlockId, desiredLod);
+ main
                 }
             }
         }
@@ -163,6 +194,13 @@ namespace RobbieCraft.World
             chunk.transform.SetParent(transform, false);
             chunk.transform.position = new Vector3(coord.X * ChunkConfig.ChunkSizeX, 0f, coord.Z * ChunkConfig.ChunkSizeZ);
             chunk.gameObject.SetActive(true);
+ codex/review-agents.md-and-checklist.md-files
+            if (_runtimeInitialized)
+            {
+                chunk.ConfigureVisuals(_blockRuntimeData.UvData, _blockRuntimeData.BaseColors, _blockRuntimeData.TintMask, _blockRuntimeData.TintPalette);
+            }
+
+ main
             _loadedChunks[coord] = chunk;
             return chunk;
         }
@@ -175,12 +213,21 @@ namespace RobbieCraft.World
                 BaseHeight = flat ? baseHeight : baseHeight,
                 NoiseScale = flat ? 0f : noiseScale,
                 HeightAmplitude = flat ? 0f : heightAmplitude,
+         codex/review-agents.md-and-checklist.md-files
+                GroundBlockId = _resolvedGroundBlockId,
+                AirBlockId = _resolvedAirBlockId
+            };
+
+            chunk.ScheduleGeneration(coord, job);
+            chunk.ScheduleMeshBuild(_resolvedAirBlockId, lodLevel);
+
                 GroundBlockId = groundBlockId,
                 AirBlockId = airBlockId
             };
 
             chunk.ScheduleGeneration(coord, job);
             chunk.ScheduleMeshBuild(airBlockId, lodLevel);
+ main
         }
 
         private static ChunkCoordinate WorldToChunk(Vector3 worldPosition)
@@ -205,5 +252,40 @@ namespace RobbieCraft.World
 
             return 2;
         }
+ codex/review-agents.md-and-checklist.md-files
+
+        private void InitializeRuntimeData()
+        {
+            _resolvedGroundBlockId = groundBlock != null ? groundBlock.Id : (byte)1;
+            _resolvedAirBlockId = airBlock != null ? airBlock.Id : (byte)0;
+
+            if (blockRegistry == null)
+            {
+                Debug.LogWarning("WorldManager is missing a BlockRegistry reference. Falling back to default block ids.");
+                return;
+            }
+
+            try
+            {
+                _blockRuntimeData = blockRegistry.CreateRuntimeData(Allocator.Persistent);
+                _runtimeInitialized = true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Failed to build block runtime data: {ex.Message}");
+                _runtimeInitialized = false;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_runtimeInitialized)
+            {
+                _blockRuntimeData.Dispose();
+                _runtimeInitialized = false;
+            }
+        }
+
+main
     }
 }

@@ -1,3 +1,7 @@
+codex/review-agents.md-and-checklist.md-files
+using RobbieCraft.Blocks;
+
+main
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
@@ -15,6 +19,24 @@ namespace RobbieCraft.World
         [ReadOnly]
         public NativeArray<byte> Blocks;
 
+codex/review-agents.md-and-checklist.md-files
+        [ReadOnly]
+        public NativeArray<byte> TintIndices;
+
+        [ReadOnly]
+        public NativeArray<BlockUvData> BlockUvs;
+
+        [ReadOnly]
+        public NativeArray<float4> BlockColors;
+
+        [ReadOnly]
+        public NativeArray<byte> BlockTintMask;
+
+        [ReadOnly]
+        public NativeArray<float4> TintPalette;
+
+
+ main
         /// <summary>
         /// Block id that represents "air" and should not be rendered.
         /// </summary>
@@ -24,7 +46,12 @@ namespace RobbieCraft.World
         public NativeList<int> Triangles;
         public NativeList<float3> Normals;
         public NativeList<float2> Uv;
+codex/review-agents.md-and-checklist.md-files
+        public NativeList<float4> Colors;
+        public NativeArray<int> MaskBuffer;
+
         public NativeArray<byte> MaskBuffer;
+ main
 
         private static readonly int3[] Directions =
         {
@@ -116,7 +143,11 @@ namespace RobbieCraft.World
                         bool neighborSolid = IsSolid(neighbor.x, neighbor.y, neighbor.z);
 
                         int maskIndex = (v - b1) * uSize + (u - a1);
+codex/review-agents.md-and-checklist.md-files
+                        MaskBuffer[maskIndex] = (currentSolid && !neighborSolid) ? EncodeFaceKey(voxel.x, voxel.y, voxel.z) : 0;
+
                         MaskBuffer[maskIndex] = (byte)((currentSolid && !neighborSolid) ? GetBlock(voxel.x, voxel.y, voxel.z) : (byte)0);
+main
                     }
                 }
 
@@ -125,15 +156,24 @@ namespace RobbieCraft.World
                 {
                     for (int u = 0; u < uSize; )
                     {
+ codex/review-agents.md-and-checklist.md-files
+                        int faceKey = MaskBuffer[v * uSize + u];
+                        if (faceKey == 0)
+
                         byte block = MaskBuffer[v * uSize + u];
                         if (block == 0)
+ main
                         {
                             u++;
                             continue;
                         }
 
                         int width = 1;
+ codex/review-agents.md-and-checklist.md-files
+                        while (u + width < uSize && MaskBuffer[v * uSize + (u + width)] == faceKey)
+
                         while (u + width < uSize && MaskBuffer[v * uSize + (u + width)] == block)
+ main
                         {
                             width++;
                         }
@@ -144,7 +184,11 @@ namespace RobbieCraft.World
                         {
                             for (int k = 0; k < width; k++)
                             {
+ codex/review-agents.md-and-checklist.md-files
+                                if (MaskBuffer[(v + height) * uSize + (u + k)] != faceKey)
+
                                 if (MaskBuffer[(v + height) * uSize + (u + k)] != block)
+ main
                                 {
                                     done = true;
                                     break;
@@ -158,7 +202,11 @@ namespace RobbieCraft.World
                         }
 
                         // Add face
+ codex/review-agents.md-and-checklist.md-files
+                        AddFace(dirIndex, u + a1, v + b1, c, width, height, faceKey);
+
                         AddFace(dirIndex, u + a1, v + b1, c, width, height, block);
+ main
 
                         // Clear mask region
                         for (int y = 0; y < height; y++)
@@ -194,8 +242,15 @@ namespace RobbieCraft.World
 
         private byte GetBlock(int x, int y, int z) => Blocks[ChunkConfig.ToIndex(x, y, z)];
 
+ codex/review-agents.md-and-checklist.md-files
+        private void AddFace(int dirIndex, int u, int v, int c, int width, int height, int faceKey)
+        {
+            byte blockId = (byte)(faceKey & 0xFF);
+            byte tintIndex = (byte)((faceKey >> 8) & 0xFF);
+
         private void AddFace(int dirIndex, int u, int v, int c, int width, int height, byte blockId)
         {
+ main
             float3 normal = Directions[dirIndex];
             int vertexStartIndex = Vertices.Length;
 
@@ -254,10 +309,60 @@ namespace RobbieCraft.World
             Normals.Add(normal);
             Normals.Add(normal);
 
+codex/review-agents.md-and-checklist.md-files
+            float4 uvRect = GetFaceUv(blockId, dirIndex);
+            float2 uvMin = new float2(uvRect.x, uvRect.y);
+            float2 uvMax = new float2(uvRect.z, uvRect.w);
+            float2 uvSize = uvMax - uvMin;
+
+            Uv.Add(uvMin);
+            Uv.Add(uvMin + new float2(uvSize.x * width, 0f));
+            Uv.Add(uvMin + new float2(0f, uvSize.y * height));
+            Uv.Add(uvMin + new float2(uvSize.x * width, uvSize.y * height));
+
+            float4 color = BlockTintingSystem.EvaluateTintedColor(blockId, tintIndex, BlockColors, BlockTintMask, TintPalette);
+            Colors.Add(color);
+            Colors.Add(color);
+            Colors.Add(color);
+            Colors.Add(color);
+        }
+
+        private int EncodeFaceKey(int x, int y, int z)
+        {
+            byte block = GetBlock(x, y, z);
+            if (block == AirBlockId)
+            {
+                return 0;
+            }
+
+            byte tint = TintIndices.IsCreated ? TintIndices[ChunkConfig.ToIndex(x, y, z)] : (byte)0;
+            return block | (tint << 8);
+        }
+
+        private float4 GetFaceUv(byte blockId, int dirIndex)
+        {
+            if (!BlockUvs.IsCreated || blockId >= BlockUvs.Length)
+            {
+                return new float4(0f, 0f, 1f, 1f);
+            }
+
+            BlockFace face = dirIndex switch
+            {
+                0 => BlockFace.PositiveZ,
+                1 => BlockFace.NegativeZ,
+                2 => BlockFace.PositiveY,
+                3 => BlockFace.NegativeY,
+                4 => BlockFace.PositiveX,
+                _ => BlockFace.NegativeX
+            };
+
+            return BlockUvs[blockId].GetFace(face);
+
             Uv.Add(new float2(0, 0));
             Uv.Add(new float2(width, 0));
             Uv.Add(new float2(0, height));
             Uv.Add(new float2(width, height));
+ main
         }
     }
 }

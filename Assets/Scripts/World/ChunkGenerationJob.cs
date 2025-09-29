@@ -13,6 +13,10 @@ namespace RobbieCraft.World
     {
         public ChunkCoordinate Coordinate;
         public NativeArray<byte> Blocks;
+ codex/review-agents.md-and-checklist.md-files
+        public NativeArray<byte> TintIndices;
+
+ main
         public float BaseHeight;
         public float NoiseScale;
         public float HeightAmplitude;
@@ -28,7 +32,16 @@ namespace RobbieCraft.World
             float height = BaseHeight + noise.snoise(new float2(worldX, worldZ) * NoiseScale) * HeightAmplitude;
             int terrainHeight = math.clamp((int)math.round(height), 0, ChunkConfig.ChunkSizeY - 1);
 
+ codex/review-agents.md-and-checklist.md-files
+            byte block = localPos.y <= terrainHeight ? GroundBlockId : AirBlockId;
+            Blocks[index] = block;
+            if (TintIndices.IsCreated)
+            {
+                TintIndices[index] = 0;
+            }
+
             Blocks[index] = localPos.y <= terrainHeight ? GroundBlockId : AirBlockId;
+ main
         }
     }
 }
