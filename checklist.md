@@ -17,15 +17,15 @@ Phase 1 – Core Foundations (Week 1)
 
 ✅ Block & Registry
 
-[ ] Create BlockType registry (ScriptableObject).
+[x] Create BlockType registry (ScriptableObject).
 
-[ ] Add material atlas (2048×2048).
+[x] Add material atlas (2048×2048).
 
-[ ] Implement durability + break times.
+[x] Implement durability + break times.
 
-[ ] Implement block tinting system for Rainbow Painter.
+[x] Implement block tinting system for Rainbow Painter.
 
-[ ] Add special block types (Candy, Robot, Ice).
+[x] Add special block types (Candy, Robot, Ice).
 
 
 ✅ Inventory & Hotbar
