@@ -4,15 +4,15 @@ Phase 1 – Core Foundations (Week 1)
 
 ✅ World & Chunk System
 
-[ ] Implement chunk grid (16×128×16).
+[x] Implement chunk grid (16×128×16).
 
-[ ] Add greedy meshing algorithm.
+[x] Add greedy meshing algorithm.
 
-[ ] Async chunk generation with Unity Jobs + Burst.
+[x] Async chunk generation with Unity Jobs + Burst.
 
-[ ] Frustum culling + LOD system.
+[x] Frustum culling + LOD system.
 
-[ ] Flat 32×32 safe spawn area.
+[x] Flat 32×32 safe spawn area.
 
 
 ✅ Block & Registry
